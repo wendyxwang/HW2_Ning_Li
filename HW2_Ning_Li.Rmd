@@ -1,0 +1,91 @@
+---
+title: "BIOSTAT578_HW2"
+author: "Ning LI"
+date: "Sunday, February 08, 2015"
+output: html_document
+---
+##**Problem**  
+1. Use the GEOmetabd package to find all HCV gene expression data using the Illumina platform submitted by an investigator at Yale. This should be done with a single query, showing the title, the GSE accession number, the GPL accession number and the manufacturer and the description of the platform used.  
+2. Reproduce your above query using the data.table package. Again, try to use a single line of code. [Hint: You first need to convert all db tables to data.table tables].
+
+###**Answer_01**
+First, Let's load the `GEOmetadb` library.
+```{r,message=FALSE}
+suppressMessages(library(GEOmetadb))
+```
+We should have already downloaded this database, but just in case, let's check the existence of the database.
+```{r}
+## This will download the entire database, so it can be slow
+# Download database only if it's not done already in local directory
+if(!file.exists("GEOmetadb.sqlite"))
+{
+  getSQLiteFile()
+}
+```
+Connect to the GEO database.
+```{r}
+geo_con <- dbConnect(SQLite(),"GEOmetadb.sqlite")
+dbListTables(geo_con)
+```
+Check the tables of gse and gpl.(Here, we hide the results of the below commands.)
+```{r,message=FALSE,results='hide'}
+dbListFields(geo_con,"gse")
+dbListFields(geo_con,'gpl')
+dbListFields(geo_con,'gse_gpl')
+```
+Since we want to find all HCV gene expression data using the Illumina platform submitted by an investigator at Yale, we'are going to look any records with titles that contain "HCV", contacts that include "Yale" and manufacturers have "Illumia" in gss/gpl tables. The single SQL query is very long, which is shown as below.
+
+
+```{r}
+hcv_data <- dbGetQuery(geo_con, "SELECT gse.title AS title,
+                                        gse.gse AS gse,
+                                        gpl.gpl AS gpl, 
+                                        gpl.manufacturer AS manufacturer, 
+                                        gpl.description AS description  
+                                        FROM
+                                        (gse JOIN gse_gpl ON gse.gse=gse_gpl.gse) new 
+                                        JOIN gpl ON new.gpl=gpl.gpl 
+                                        WHERE gse.title LIKE '%HCV%' 
+                                        AND gpl.manufacturer LIKE '%Illumina%'
+                                        AND gse.contact LIKE '%Yale%'")
+```
+Let's have a brief look of the results.
+```{r}
+head(hcv_data)
+```
+
+###**Answer_02**
+First, let's load data.table package.
+```{r,message=FALSE}
+library(data.table)
+```
+Second, convert gse/gpl data as data.table.
+```{r}
+gse.dt <- data.table(dbGetQuery(geo_con, "SELECT * FROM gse JOIN gse_gpl ON gse.gse=gse_gpl.gse"))
+gpl.dt <- data.table(dbGetQuery(geo_con, "SELECT * FROM gpl"))
+```
+Set "gpl" as the key for both data.tables and join them to generate the new data.table.
+
+```{r}
+setkey(gse.dt, gpl)
+setkey(gpl.dt, gpl)
+new<- gse.dt[gpl.dt,nomatch=0 ]
+```
+The same thing for this query in data.table, we'are  still going to look any records with titles that contain "HCV", contacts that include "Yale" and manufacturers have "Illumia" in new data.table.
+```{r}
+hcv <- new[title %like% 'HCV' & 
+            manufacturer %like% 'Illumina' & 
+            contact %like% 'Yale', 
+            list(title, gse, gpl, manufacturer, description)]
+```
+Finally, let's check the output results.
+```{r}
+head(hcv)
+```
+
+Also, we compare the results from two different methods, and find that they are the same. 
+
+
+The end.  
+
+<a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
